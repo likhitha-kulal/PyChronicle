@@ -1,0 +1,11 @@
+# Databases
+data/
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.vscode/
