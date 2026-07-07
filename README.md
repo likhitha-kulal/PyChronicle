@@ -17,3 +17,17 @@ The Storage Module saves execution events to a local SQLite database (`trace.db`
 - Line number where the execution event occurred
 - Name of the variable being traced
 - String representation of the variable's value at that line
+
+---
+
+## 📦 Database Schema
+
+All execution events are stored in the `events` table:
+
+| Column | Data Type | Description |
+| :--- | :--- | :--- |
+| `id` | `INTEGER PRIMARY KEY AUTOINCREMENT` | Auto-incrementing unique identifier for each trace event. |
+| `timestamp` | `REAL NOT NULL` | Epoch timestamp (decimal float) of when the event was recorded. |
+| `line_number` | `INTEGER NOT NULL` | The line number of the python file where the state changed. |
+| `variable_name` | `TEXT NOT NULL` | The name of the variable tracked at that line. |
+| `serialized_value` | `TEXT NOT NULL` | The string representation or serialized form of the variable's value. |
