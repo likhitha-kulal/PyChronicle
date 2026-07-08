@@ -32,3 +32,17 @@ def init_db(db_name=DB_NAME):
     """)
     conn.commit()
     return conn
+
+
+def insert_event(conn, line_number, variable_name, serialized_value):
+    """Inserts a new event into the events table."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO events (timestamp, line_number, variable_name, serialized_value)
+        VALUES (?, ?, ?, ?)
+        """,
+        (time.time(), line_number, variable_name, serialized_value),
+    )
+    conn.commit()
+    return cursor.lastrowid
