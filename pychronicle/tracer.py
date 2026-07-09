@@ -48,5 +48,5 @@ sys.settrace(trace_callback)
 # Execute
 exec(code, exec_globals)
 
-# Stop tracing
+
 sys.settrace(None)
