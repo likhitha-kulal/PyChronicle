@@ -46,3 +46,19 @@ def insert_event(conn, line_number, variable_name, serialized_value):
     )
     conn.commit()
     return cursor.lastrowid
+
+
+def query_by_line(conn, line_number):
+    """Queries and returns all events for a specific line number."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, timestamp, line_number, variable_name, serialized_value
+        FROM events
+        WHERE line_number = ?
+        ORDER BY timestamp
+        """,
+        (line_number,),
+    )
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
