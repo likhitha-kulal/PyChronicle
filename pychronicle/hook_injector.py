@@ -51,28 +51,28 @@ class HookInjector(ast.NodeTransformer):
 
         hook_calls: list[ast.stmt] = []
         for target in node.targets:
-            hook_calls.extend(self._build_hook_calls(target, node.lineno))
+            hook_calls.extend(self._build_hook_calls(target, node))
 
         # Return the original assignment followed by hook call(s)
         return [node, *hook_calls]
 
     def _build_hook_calls(
-        self, target: ast.expr, lineno: int
+        self, target: ast.expr, anchor: ast.Assign
     ) -> list[ast.stmt]:
         """Build hook-call statements for a (possibly nested) target."""
         calls: list[ast.stmt] = []
 
         if isinstance(target, ast.Name):
-            calls.append(self._make_call(target.id, lineno))
+            calls.append(self._make_call(target.id, anchor))
         elif isinstance(target, (ast.Tuple, ast.List)):
             for elt in target.elts:
-                calls.extend(self._build_hook_calls(elt, lineno))
+                calls.extend(self._build_hook_calls(elt, anchor))
         # Subscript / Attribute targets are intentionally skipped,
         # consistent with ast_parser.py's behavior.
 
         return calls
 
-    def _make_call(self, var_name: str, lineno: int) -> ast.Expr:
+    def _make_call(self, var_name: str, anchor: ast.Assign) -> ast.Expr:
         """Build: __pychronicle_hook__('var_name', var_name, lineno)"""
         call = ast.Expr(
             value=ast.Call(
@@ -80,13 +80,13 @@ class HookInjector(ast.NodeTransformer):
                 args=[
                     ast.Constant(value=var_name),
                     ast.Name(id=var_name, ctx=ast.Load()),
-                    ast.Constant(value=lineno),
+                    ast.Constant(value=anchor.lineno),
                 ],
                 keywords=[],
             )
         )
-        ast.copy_location(call, call.value)
-        ast.fix_missing_locations(call)
+        for node in ast.walk(call):
+            ast.copy_location(node, anchor)
         return call
 
 
