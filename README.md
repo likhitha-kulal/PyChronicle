@@ -68,3 +68,18 @@ from pychronicle import insert_event
 row_id = insert_event(conn, line_number=42, variable_name="user_role", serialized_value="'admin'")
 print(f"Recorded event ID: {row_id}")
 ```
+
+### 3. `query_by_line(conn, line_number)`
+Retrieves all recorded events for a specific line number.
+* **Arguments:**
+  * `conn`: `sqlite3.Connection` database connection.
+  * `line_number` (int): The line number to filter by.
+* **Returns:** `list[dict]` - A list of dictionaries representing each event matching the line number, sorted chronologically.
+
+```python
+from pychronicle import query_by_line
+
+events = query_by_line(conn, line_number=42)
+for event in events:
+    print(f"Time: {event['timestamp']} | Var: {event['variable_name']} = {event['serialized_value']}")
+```

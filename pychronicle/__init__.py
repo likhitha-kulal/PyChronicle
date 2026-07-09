@@ -8,7 +8,7 @@ file thin: it should only re-export, never contain logic.
 
 from pychronicle.ast_parser import find_assignments
 from pychronicle.hook_injector import inject_hooks, HookInjector
-from pychronicle.db import init_db, insert_event
+from pychronicle.db import init_db, insert_event, query_by_line
 
 __all__ = [
     "find_assignments",
@@ -16,6 +16,7 @@ __all__ = [
     "HookInjector",
     "init_db",
     "insert_event",
+    "query_by_line",
 ]
 
 __version__ = "0.1.0"
