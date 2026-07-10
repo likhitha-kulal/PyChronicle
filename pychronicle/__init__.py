@@ -8,11 +8,15 @@ file thin: it should only re-export, never contain logic.
 
 from .ast_parser import find_assignments
 from .hook_injector import inject_hooks, HookInjector
+from .db import init_db, insert_event, query_by_line
 
 __all__ = [
     "find_assignments",
     "inject_hooks",
     "HookInjector",
+    "init_db",
+    "insert_event",
+    "query_by_line",
 ]
 
 __version__ = "0.1.0"

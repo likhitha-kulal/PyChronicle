@@ -1,7 +1,7 @@
 import sys
 import os
 
-TARGET_FILE = os.path.abspath("test/test_target.py")
+TARGET_FILE = os.path.abspath("test/fixtures/test_target.py") 
 
 
 def trace_callback(frame, event, arg):
@@ -9,10 +9,16 @@ def trace_callback(frame, event, arg):
         return trace_callback
 
     ignore = {
-        "__builtins__",
-        "__name__",
-        "__file__",
-    }
+    "__builtins__",
+    "__name__",
+    "__file__",
+    "__doc__",
+    "__package__",
+    "__loader__",
+    "__spec__",
+    "__cached__",
+     "compute",
+}
 
     locals_dict = {
         key: value
