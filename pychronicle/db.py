@@ -1,0 +1,64 @@
+"""
+SQLite Storage Module for PyChronicle.
+Stores traced execution events in a local SQLite database.
+"""
+
+import sqlite3
+import time
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "..", "data")
+DB_NAME = os.path.join(DATA_DIR, "trace.db")
+
+
+def init_db(db_name=DB_NAME):
+    """Initializes the database and creates the events table."""
+    db_dir = os.path.dirname(db_name)
+    if db_dir and db_dir != ":memory:":
+        os.makedirs(db_dir, exist_ok=True)
+
+    conn = sqlite3.connect(db_name)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp       REAL    NOT NULL,
+            line_number     INTEGER NOT NULL,
+            variable_name   TEXT    NOT NULL,
+            serialized_value TEXT   NOT NULL
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def insert_event(conn, line_number, variable_name, serialized_value):
+    """Inserts a new event into the events table."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO events (timestamp, line_number, variable_name, serialized_value)
+        VALUES (?, ?, ?, ?)
+        """,
+        (time.time(), line_number, variable_name, serialized_value),
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def query_by_line(conn, line_number):
+    """Queries and returns all events for a specific line number."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, timestamp, line_number, variable_name, serialized_value
+        FROM events
+        WHERE line_number = ?
+        ORDER BY timestamp
+        """,
+        (line_number,),
+    )
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
