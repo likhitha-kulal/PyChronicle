@@ -83,3 +83,44 @@ events = query_by_line(conn, line_number=42)
 for event in events:
     print(f"Time: {event['timestamp']} | Var: {event['variable_name']} = {event['serialized_value']}")
 ```
+
+---
+
+## 🧪 Testing & Validation
+
+The database module includes a self-contained test suite that validates all functionality against an in-memory SQLite instance.
+
+To run the unit tests, use python unittest runner:
+
+```bash
+python -m unittest test.test_db -v
+```
+
+### Expected Output:
+```text
+test_init_db (test.test_db.TestStorageDB) ... ok
+test_insert_and_query_events (test.test_db.TestStorageDB) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+```
+
+---
+
+## 📁 Project Structure
+
+```text
+├── data/               # Auto-generated database storage directory
+│   └── trace.db        # SQLite database file
+├── pychronicle/        # Core debugger engine package
+│   ├── __init__.py     # Package exports
+│   ├── ast_parser.py   # AST parsing logic (P1)
+│   ├── hook_injector.py# AST rewrite hooks (P1)
+│   └── db.py           # SQLite storage module (P3 - Pankaj)
+├── test/               # Unit test suites
+│   ├── test_ast_parser.py
+│   └── test_db.py      # Database unit tests (P3 - Pankaj)
+└── README.md           # Project documentation (this file)
+```
