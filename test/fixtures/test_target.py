@@ -6,7 +6,7 @@ def compute():
     for i in range(2):
         total = total + i
         squared = i * i
-    return total
+    return total,squared
 
 x = compute()
 y = x * 2

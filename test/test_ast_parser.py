@@ -163,6 +163,8 @@ class TestFindAssignments(unittest.TestCase):
         finally:
             os.remove(temp_path)
 
+    
+
 
 if __name__ == "__main__":
     unittest.main()
