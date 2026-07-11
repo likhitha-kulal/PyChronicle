@@ -1,24 +1,59 @@
+"""
+Tracer Module for PyChronicle.
+
+Tracks Python program execution using sys.settrace(),
+detects variable changes, and stores execution events
+in the SQLite database.
+"""
+
 import sys
 import os
 
-TARGET_FILE = os.path.abspath("test/fixtures/test_target.py") 
+# Allow imports when running: python pychronicle/tracer.py
+sys.path.insert(
+    0,
+    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+)
+
+from pychronicle.db import init_db, insert_event
+
+# Default target used during development/testing
+DEFAULT_TARGET = "test/fixtures/test_target.py"
+
+# Use command-line argument if provided
+TARGET_FILE = os.path.abspath(
+    sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TARGET
+)
+
+# Initialize database
+conn = init_db()
+
+# Store previous variable values
+previous_locals = {}
 
 
 def trace_callback(frame, event, arg):
+    global previous_locals
+
+    # Trace only the selected target file
     if os.path.abspath(frame.f_code.co_filename) != TARGET_FILE:
         return trace_callback
 
+    # Only process executed lines
+    if event != "line":
+        return trace_callback
+
     ignore = {
-    "__builtins__",
-    "__name__",
-    "__file__",
-    "__doc__",
-    "__package__",
-    "__loader__",
-    "__spec__",
-    "__cached__",
-     "compute",
-}
+        "__builtins__",
+        "__name__",
+        "__file__",
+        "__doc__",
+        "__package__",
+        "__loader__",
+        "__spec__",
+        "__cached__",
+        "compute",
+    }
 
     locals_dict = {
         key: value
@@ -32,6 +67,18 @@ def trace_callback(frame, event, arg):
         f"Locals: {locals_dict}"
     )
 
+    # Store only variables whose value changed
+    for variable_name, variable_value in locals_dict.items():
+        if previous_locals.get(variable_name) != variable_value:
+            insert_event(
+                conn,
+                frame.f_lineno,
+                variable_name,
+                repr(variable_value),
+            )
+
+    previous_locals = locals_dict.copy()
+
     return trace_callback
 
 
@@ -42,7 +89,7 @@ with open(TARGET_FILE, "r", encoding="utf-8") as f:
 # Compile target file
 code = compile(source, TARGET_FILE, "exec")
 
-# Separate namespace
+# Namespace for execution
 exec_globals = {
     "__name__": "__main__",
     "__file__": TARGET_FILE,
@@ -51,8 +98,8 @@ exec_globals = {
 # Start tracing
 sys.settrace(trace_callback)
 
-# Execute
-exec(code, exec_globals)
-
-# Stop tracing
-sys.settrace(None)
+try:
+    exec(code, exec_globals)
+finally:
+    sys.settrace(None)
+    conn.close()
