@@ -18,12 +18,20 @@ sys.path.insert(
 from pychronicle.db import init_db, insert_event
 
 # Default target used during development/testing
-DEFAULT_TARGET = "test/fixtures/test_target.py"
+##DEFAULT_TARGET = "test/fixtures/test_target.py"
 
 # Use command-line argument if provided
-TARGET_FILE = os.path.abspath(
-    sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TARGET
-)
+##TARGET_FILE = os.path.abspath(
+  #  sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TARGET
+#)
+if len(sys.argv) > 1:
+    TARGET_FILE = os.path.abspath(
+        os.path.join("test", "fixtures", sys.argv[1])
+    )
+else:
+    TARGET_FILE = os.path.abspath(
+        "test/fixtures/test_target.py"
+    )
 
 # Initialize database
 conn = init_db()
