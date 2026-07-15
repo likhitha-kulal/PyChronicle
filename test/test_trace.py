@@ -1,3 +1,10 @@
+"""
+Trace module validation tests.
+
+Owner: P2 (Tracer Engineer)
+Week: 1
+"""
+
 import subprocess
 import sys
 
