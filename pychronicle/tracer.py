@@ -1,21 +1,28 @@
 """
 Tracer Module for PyChronicle.
 
-Tracks Python program execution using sys.settrace(),
-detects variable changes, and stores execution events
-in the SQLite database.
+Uses both:
+1. sys.settrace() for line-by-line execution tracing.
+2. P1's AST hook injector for assignment hooks.
+
+Stores traced events in the SQLite database.
 """
 
-import sys
-import os
+from __future__ import annotations
 
-# Allow imports when running: python pychronicle/tracer.py
+import os
+import sys
+
+# Allow imports when running:
+# python pychronicle/tracer.py
 sys.path.insert(
     0,
     os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 )
 
 from pychronicle.db import init_db, insert_event
+from pychronicle.hook_injector import inject_hooks
+
 
 DEFAULT_TARGET = "test/fixtures/test_target.py"
 
@@ -31,21 +38,19 @@ if len(sys.argv) > 1:
 else:
     TARGET_FILE = os.path.abspath(DEFAULT_TARGET)
 
-# Initialize database
-conn = init_db()
 
-# Store previous variable values
+conn = init_db()
 previous_locals = {}
 
 
 def trace_callback(frame, event, arg):
+    """Line-by-line tracer using sys.settrace()."""
+
     global previous_locals
 
-    # Trace only the selected target file
     if os.path.abspath(frame.f_code.co_filename) != TARGET_FILE:
         return trace_callback
 
-    # Only process executed lines
     if event != "line":
         return trace_callback
 
@@ -58,7 +63,7 @@ def trace_callback(frame, event, arg):
         "__loader__",
         "__spec__",
         "__cached__",
-        "compute",
+        "__pychronicle_hook__",
     }
 
     locals_dict = {
@@ -73,7 +78,6 @@ def trace_callback(frame, event, arg):
         f"Locals: {locals_dict}"
     )
 
-    # Store only variables whose value changed
     for variable_name, variable_value in locals_dict.items():
         if previous_locals.get(variable_name) != variable_value:
             insert_event(
@@ -88,20 +92,37 @@ def trace_callback(frame, event, arg):
     return trace_callback
 
 
-# Read target file
+def __pychronicle_hook__(var_name, value, lineno):
+    """Called by P1's injected hooks."""
+
+    print(
+        f"[HOOK] Line {lineno} | "
+        f"{var_name} = {value}"
+    )
+
+    insert_event(
+        conn,
+        lineno,
+        var_name,
+        repr(value),
+    )
+
+
 with open(TARGET_FILE, "r", encoding="utf-8") as f:
     source = f.read()
 
-# Compile target file
-code = compile(source, TARGET_FILE, "exec")
+# Rewrite the source using P1's injector
+rewritten_source = inject_hooks(source)
 
-# Namespace for execution
+# Compile the rewritten source
+code = compile(rewritten_source, TARGET_FILE, "exec")
+
 exec_globals = {
     "__name__": "__main__",
     "__file__": TARGET_FILE,
+    "__pychronicle_hook__": __pychronicle_hook__,
 }
 
-# Start tracing
 sys.settrace(trace_callback)
 
 try:
