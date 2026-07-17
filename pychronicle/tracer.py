@@ -40,13 +40,15 @@ else:
 
 
 conn = init_db()
-previous_locals = {}
 
 
 def trace_callback(frame, event, arg):
-    """Line-by-line tracer using sys.settrace()."""
+    """
+    Line-by-line tracer using sys.settrace().
 
-    global previous_locals
+    Responsible only for execution tracing.
+    Variable changes are captured by AST hooks.
+    """
 
     if os.path.abspath(frame.f_code.co_filename) != TARGET_FILE:
         return trace_callback
@@ -78,22 +80,18 @@ def trace_callback(frame, event, arg):
         f"Locals: {locals_dict}"
     )
 
-    for variable_name, variable_value in locals_dict.items():
-        if previous_locals.get(variable_name) != variable_value:
-            insert_event(
-                conn,
-                frame.f_lineno,
-                variable_name,
-                repr(variable_value),
-            )
-
-    previous_locals = locals_dict.copy()
+    # Do NOT insert variable events here.
+    # P1 AST hooks handle variable changes.
 
     return trace_callback
 
 
 def __pychronicle_hook__(var_name, value, lineno):
-    """Called by P1's injected hooks."""
+    """
+    Called by P1's injected hooks.
+
+    This is the single source of variable change events.
+    """
 
     print(
         f"[HOOK] Line {lineno} | "
@@ -111,17 +109,24 @@ def __pychronicle_hook__(var_name, value, lineno):
 with open(TARGET_FILE, "r", encoding="utf-8") as f:
     source = f.read()
 
-# Rewrite the source using P1's injector
+
+# Rewrite source using P1's injector
 rewritten_source = inject_hooks(source)
 
-# Compile the rewritten source
-code = compile(rewritten_source, TARGET_FILE, "exec")
+# Compile rewritten source
+code = compile(
+    rewritten_source,
+    TARGET_FILE,
+    "exec"
+)
+
 
 exec_globals = {
     "__name__": "__main__",
     "__file__": TARGET_FILE,
     "__pychronicle_hook__": __pychronicle_hook__,
 }
+
 
 sys.settrace(trace_callback)
 
