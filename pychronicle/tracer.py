@@ -1,17 +1,19 @@
 """
-Tracer module for PyChronicle.
+PyChronicle Tracer Module.
 
-Provides a reusable Tracer class that combines:
+Implements program execution tracing using:
 
-1. sys.settrace() for execution tracing.
-2. AST hook injection for variable assignment tracking.
+1. sys.settrace() for line-by-line execution tracking.
+2. AST hook injection for variable assignment monitoring.
+3. SQLite event storage for captured trace data.
 
-Can be imported by other modules or executed directly.
+Supports reusable Tracer class usage and command-line execution
+for tracing Python programs.
 """
-
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 
@@ -20,11 +22,25 @@ from pychronicle.hook_injector import inject_hooks
 
 DEFAULT_TARGET = "test/fixtures/test_target.py"
 
+REPR_MAX_LEN = 500
+
+logger = logging.getLogger("pychronicle.tracer")
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(_handler)
+logger.setLevel(logging.INFO)
+
 
 class Tracer:
     """Reusable execution tracer for Python programs."""
 
     def __init__(self, target_file: str):
+        if not os.path.isfile(target_file):
+            raise FileNotFoundError(
+                f"Tracer target does not exist or is not a file: {target_file!r}"
+            )
+
         self.target_file = os.path.abspath(target_file)
         self.conn = None
 
@@ -36,55 +52,62 @@ class Tracer:
         Variable changes are handled by the injected AST hooks.
         """
 
+        # Prune frames outside the target file immediately, so Python
+        # stops invoking this callback for their sub-events entirely.
         if os.path.abspath(frame.f_code.co_filename) != self.target_file:
-            return self.trace_callback
+            return None
 
         if event != "line":
             return self.trace_callback
 
-        ignore = {
-            "__builtins__",
-            "__name__",
-            "__file__",
-            "__doc__",
-            "__package__",
-            "__loader__",
-            "__spec__",
-            "__cached__",
-            "__pychronicle_hook__",
-        }
-
         locals_dict = {
             key: value
             for key, value in frame.f_locals.items()
-            if key not in ignore
+            if not (key.startswith("__") and key.endswith("__"))
         }
 
-        print(
-            f"Line {frame.f_lineno} | "
-            f"Event: {event} | "
-            f"Locals: {locals_dict}"
+        logger.info(
+            "Line %s | Event: %s | Locals: %s",
+            frame.f_lineno,
+            event,
+            locals_dict,
         )
 
         return self.trace_callback
 
     def hook(self, var_name, value, lineno):
         """
-        Called by injected AST hooks whenever
-        a variable assignment occurs.
+        Called by injected AST hooks whenever a variable assignment occurs.
+
+        Any failure here (bad __repr__, DB error, etc.) is caught and
+        logged rather than allowed to propagate into the traced program,
+        since a tracer-internal problem should never crash the target.
         """
 
-        print(
-            f"[HOOK] Line {lineno} | "
-            f"{var_name} = {value}"
-        )
+        try:
+            value_repr = repr(value)
+        except Exception as exc:  # noqa: BLE001 - repr can raise arbitrary errors
+            value_repr = f"<unrepresentable: {exc!r}>"
 
-        insert_event(
-            self.conn,
-            lineno,
-            var_name,
-            repr(value),
-        )
+        if len(value_repr) > REPR_MAX_LEN:
+            value_repr = value_repr[:REPR_MAX_LEN] + "...<truncated>"
+
+        logger.info("[HOOK] Line %s | %s = %s", lineno, var_name, value_repr)
+
+        if self.conn is None:
+            logger.warning(
+                "[HOOK] Skipping DB write for %s at line %s: no active connection",
+                var_name,
+                lineno,
+            )
+            return
+
+        try:
+            insert_event(self.conn, lineno, var_name, value_repr)
+        except Exception:
+            logger.exception(
+                "[HOOK] Failed to record event for %s at line %s", var_name, lineno
+            )
 
     def run(self):
         """Execute tracing."""
@@ -119,6 +142,7 @@ class Tracer:
         finally:
             if self.conn is not None:
                 self.conn.close()
+                self.conn = None
 
 
 def resolve_target_file(target: str | None = None) -> str:
@@ -137,8 +161,8 @@ def resolve_target_file(target: str | None = None) -> str:
     )
 
 
-def main():
-    """Command-line entry point."""
+def main() -> int:
+    """Command-line entry point. Returns a process exit code."""
 
     parser = argparse.ArgumentParser(
         description="Run the PyChronicle tracer."
@@ -151,13 +175,33 @@ def main():
         help="Python file to trace",
     )
 
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable debug logging",
+    )
+
     args = parser.parse_args()
+
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
 
     target = resolve_target_file(args.target)
 
-    tracer = Tracer(target)
-    tracer.run()
+    try:
+        tracer = Tracer(target)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        tracer.run()
+    except Exception:
+        logger.exception("Tracing target %s failed", target)
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
