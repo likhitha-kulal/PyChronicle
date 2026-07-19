@@ -26,20 +26,24 @@ from pychronicle.hook_injector import inject_hooks
 
 DEFAULT_TARGET = "test/fixtures/test_target.py"
 
-if len(sys.argv) > 1:
-    target = sys.argv[1]
+TARGET_FILE = None
+conn = None
 
-    if os.path.exists(target):
-        TARGET_FILE = os.path.abspath(target)
-    else:
-        TARGET_FILE = os.path.abspath(
+
+def get_target_file():
+    """Return the target Python file to trace."""
+
+    if len(sys.argv) > 1:
+        target = sys.argv[1]
+
+        if os.path.exists(target):
+            return os.path.abspath(target)
+
+        return os.path.abspath(
             os.path.join("test", "fixtures", target)
         )
-else:
-    TARGET_FILE = os.path.abspath(DEFAULT_TARGET)
 
-
-conn = init_db()
+    return os.path.abspath(DEFAULT_TARGET)
 
 
 def trace_callback(frame, event, arg):
@@ -80,9 +84,6 @@ def trace_callback(frame, event, arg):
         f"Locals: {locals_dict}"
     )
 
-    # Do NOT insert variable events here.
-    # P1 AST hooks handle variable changes.
-
     return trace_callback
 
 
@@ -106,32 +107,44 @@ def __pychronicle_hook__(var_name, value, lineno):
     )
 
 
-with open(TARGET_FILE, "r", encoding="utf-8") as f:
-    source = f.read()
+def main():
+    """Run the PyChronicle tracer."""
+
+    global TARGET_FILE
+    global conn
+
+    TARGET_FILE = get_target_file()
+    conn = init_db()
+
+    with open(TARGET_FILE, "r", encoding="utf-8") as f:
+        source = f.read()
+
+    # Rewrite source using P1's injector
+    rewritten_source = inject_hooks(source)
+
+    # Compile rewritten source
+    code = compile(
+        rewritten_source,
+        TARGET_FILE,
+        "exec",
+    )
+
+    exec_globals = {
+        "__name__": "__main__",
+        "__file__": TARGET_FILE,
+        "__pychronicle_hook__": __pychronicle_hook__,
+    }
+
+    sys.settrace(trace_callback)
+
+    try:
+        exec(code, exec_globals)
+    finally:
+        sys.settrace(None)
+
+        if conn is not None:
+            conn.close()
 
 
-# Rewrite source using P1's injector
-rewritten_source = inject_hooks(source)
-
-# Compile rewritten source
-code = compile(
-    rewritten_source,
-    TARGET_FILE,
-    "exec"
-)
-
-
-exec_globals = {
-    "__name__": "__main__",
-    "__file__": TARGET_FILE,
-    "__pychronicle_hook__": __pychronicle_hook__,
-}
-
-
-sys.settrace(trace_callback)
-
-try:
-    exec(code, exec_globals)
-finally:
-    sys.settrace(None)
-    conn.close()
+if __name__ == "__main__":
+    main()
